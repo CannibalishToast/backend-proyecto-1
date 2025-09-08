@@ -1,8 +1,6 @@
 package com.genomic.server;
 
-import com.genomic.protocol.Protocol;
-import com.genomic.protocol.Messages;
-
+import com.genomic.server.handlers.ClientHandler;
 import javax.net.ssl.*;
 import java.io.*;
 import java.security.KeyStore;
@@ -24,31 +22,13 @@ public class Server {
 
         SSLServerSocketFactory ssf = sc.getServerSocketFactory();
         SSLServerSocket serverSocket = (SSLServerSocket) ssf.createServerSocket(port);
-
         System.out.println("✅ Servidor SSL escuchando en puerto " + port);
 
+        // Aceptar múltiples clientes
         while (true) {
-            try (SSLSocket client = (SSLSocket) serverSocket.accept();
-                 BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-                 PrintWriter out = new PrintWriter(client.getOutputStream(), true)) {
-
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = in.readLine()) != null && !line.equals("END")) {
-                    sb.append(line).append("\n");
-                }
-
-                String msg = sb.toString();
-                System.out.println("📩 Mensaje recibido:\n" + msg);
-
-                String command = Protocol.extractCommand(msg);
-                if (Protocol.CREATE_PATIENT.equals(command)) {
-                    out.println(Messages.ok("Paciente creado correctamente"));
-                } else {
-                    out.println(Messages.error(400, "Comando no reconocido"));
-                }
-            }
+            SSLSocket clientSocket = (SSLSocket) serverSocket.accept();
+            System.out.println("👥 Cliente conectado.");
+            new Thread(new ClientHandler(clientSocket)).start();
         }
     }
 }
-
