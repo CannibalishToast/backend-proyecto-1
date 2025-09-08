@@ -8,6 +8,13 @@ public class Protocol {
     public static final String CREATE_PATIENT = "CREATE_PATIENT";
     public static final String GET_PATIENT = "GET_PATIENT";
     public static final String UPLOAD_FASTA = "UPLOAD_FASTA";
+    public static final String COMPARE_FASTA = "COMPARE_FASTA";
+    public static final String LIST_DISEASES = "LIST_DISEASES";
+    public static final String GET_DISEASE = "GET_DISEASE";
+    public static final String DELETE_PATIENT = "DELETE_PATIENT";
+    public static final String PING = "PING";
+
+    
 
     /**
      * Extrae el comando de un mensaje recibido
