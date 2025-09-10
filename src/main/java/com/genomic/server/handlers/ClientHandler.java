@@ -6,9 +6,8 @@ import com.genomic.model.Patient;
 import com.genomic.repository.PatientRepository;
 
 import javax.net.ssl.SSLSocket;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -55,6 +54,8 @@ public class ClientHandler implements Runnable {
                     handleDeletePatient(msg, out);
                 } else if (Protocol.UPDATE_PATIENT.equals(command)) {
                     handleUpdatePatient(msg, out);
+                } else if (Protocol.UPLOAD_FASTA.equals(command)) {
+                    handleUploadFasta(msg, out);
                 } else if (Protocol.PING.equals(command)) {
                     out.println(Messages.ok("PONG"));
                 } else {
@@ -193,7 +194,6 @@ public class ClientHandler implements Runnable {
 
             Patient existing = patientOpt.get();
 
-            // Crear nuevo paciente con datos actualizados (los no enviados se mantienen)
             Patient updated = new Patient.Builder()
                     .patientId(existing.getPatientId())
                     .fullName(data.getOrDefault("full_name", existing.getFullName()))
@@ -201,7 +201,7 @@ public class ClientHandler implements Runnable {
                     .age(Integer.parseInt(data.getOrDefault("age", String.valueOf(existing.getAge()))))
                     .sex(data.getOrDefault("sex", existing.getSex()))
                     .contactEmail(data.getOrDefault("email", existing.getContactEmail()))
-                    .registrationDate(existing.getRegistrationDate()) // no cambia
+                    .registrationDate(existing.getRegistrationDate())
                     .clinicalNotes(data.getOrDefault("clinical_notes", existing.getClinicalNotes()))
                     .checksumFasta(data.getOrDefault("checksum_fasta", existing.getChecksumFasta()))
                     .fileSizeBytes(Long.parseLong(data.getOrDefault("file_size_bytes", String.valueOf(existing.getFileSizeBytes()))))
@@ -219,6 +219,83 @@ public class ClientHandler implements Runnable {
         } catch (Exception e) {
             e.printStackTrace();
             out.println(Messages.error(500, "Error interno al actualizar paciente"));
+        }
+    }
+
+    private void handleUploadFasta(String msg, PrintWriter out) {
+        try {
+            Map<String, String> data = Protocol.parseKeyValues(msg);
+            if (!data.containsKey("patient_id") || !data.containsKey("fasta_content")) {
+                out.println(Messages.error(422, "Faltan campos: patient_id y fasta_content"));
+                return;
+            }
+
+            String patientId = data.get("patient_id");
+            String fastaContent = data.get("fasta_content").replace("\\n", "\n"); // ✅ revertir saltos de línea
+
+            String[] lines = fastaContent.split("\n");
+            if (lines.length < 2 || !lines[0].startsWith(">")) {
+                out.println(Messages.error(422, "Formato FASTA inválido"));
+                return;
+            }
+            for (int i = 1; i < lines.length; i++) {
+                if (!lines[i].matches("[ACGTN]+")) {
+                    out.println(Messages.error(422, "Secuencia contiene caracteres inválidos"));
+                    return;
+                }
+            }
+
+            File dir = new File("data/patients");
+            if (!dir.exists()) dir.mkdirs();
+
+            File fastaFile = new File(dir, patientId + ".fasta");
+            try (FileWriter fw = new FileWriter(fastaFile)) {
+                fw.write(fastaContent);
+            }
+
+            // Calcular checksum
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(fastaContent.getBytes());
+            StringBuilder sbChecksum = new StringBuilder();
+            for (byte b : digest) sbChecksum.append(String.format("%02x", b));
+
+            long fileSize = fastaFile.length();
+
+            var patients = repository.findAll();
+            var patientOpt = patients.stream()
+                    .filter(p -> p.getPatientId().equals(patientId))
+                    .findFirst();
+
+            if (patientOpt.isEmpty()) {
+                out.println(Messages.error(404, "Paciente no encontrado"));
+                return;
+            }
+
+            var existing = patientOpt.get();
+            var updated = new Patient.Builder()
+                    .patientId(existing.getPatientId())
+                    .fullName(existing.getFullName())
+                    .documentId(existing.getDocumentId())
+                    .age(existing.getAge())
+                    .sex(existing.getSex())
+                    .contactEmail(existing.getContactEmail())
+                    .registrationDate(existing.getRegistrationDate())
+                    .clinicalNotes(existing.getClinicalNotes())
+                    .checksumFasta(sbChecksum.toString())
+                    .fileSizeBytes(fileSize)
+                    .active(existing.isActive())
+                    .build();
+
+            boolean success = repository.update(updated);
+            if (success) {
+                out.println(Messages.ok("Archivo FASTA subido correctamente para paciente " + patientId));
+            } else {
+                out.println(Messages.error(500, "Error al actualizar metadata del paciente"));
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            out.println(Messages.error(500, "Error interno al subir FASTA"));
         }
     }
 }

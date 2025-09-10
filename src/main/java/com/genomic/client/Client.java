@@ -28,6 +28,7 @@ public class Client {
             System.out.println("2. Obtener paciente");
             System.out.println("3. Eliminar paciente");
             System.out.println("4. Actualizar paciente");
+            System.out.println("5. Subir archivo FASTA");
             System.out.print("Seleccione una opción: ");
             int option = Integer.parseInt(scanner.nextLine());
 
@@ -104,6 +105,26 @@ public class Client {
                 if (!notes.isBlank()) msg += "clinical_notes=" + notes + "\n";
 
                 msg += "END\n";
+
+            } else if (option == 5) {
+                System.out.print("Ingrese patient_id: ");
+                String patientId = scanner.nextLine();
+
+                System.out.print("Ruta del archivo FASTA: ");
+                String filePath = scanner.nextLine();
+
+                StringBuilder fastaContent = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+                    String l;
+                    while ((l = br.readLine()) != null) {
+                        fastaContent.append(l).append("\n");
+                    }
+                }
+
+                msg = "COMMAND: UPLOAD_FASTA\n" +
+                        "patient_id=" + patientId + "\n" +
+                        "fasta_content=" + fastaContent.toString().replace("\n", "\\n") + "\n" +
+                        "END\n";
             }
 
             out.println(msg);
