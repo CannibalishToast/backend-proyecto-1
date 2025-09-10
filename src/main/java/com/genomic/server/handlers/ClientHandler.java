@@ -31,9 +31,8 @@ public class ClientHandler implements Runnable {
             StringBuilder sb = new StringBuilder();
 
             while (true) {
-                sb.setLength(0); // limpiar buffer para cada mensaje
+                sb.setLength(0);
 
-                // Leer hasta END o desconexión
                 while ((line = in.readLine()) != null) {
                     if (line.equals("END")) break;
                     sb.append(line).append("\n");
@@ -41,18 +40,21 @@ public class ClientHandler implements Runnable {
 
                 if (sb.length() == 0) {
                     System.out.println("❌ Cliente desconectado.");
-                    break; // el cliente cerró conexión
+                    break;
                 }
 
                 String msg = sb.toString();
                 System.out.println("📩 Mensaje recibido:\n" + msg);
 
-                // Procesar comando
                 String command = Protocol.extractCommand(msg);
                 if (Protocol.CREATE_PATIENT.equals(command)) {
                     handleCreatePatient(msg, out);
                 } else if (Protocol.GET_PATIENT.equals(command)) {
                     handleGetPatient(msg, out);
+                } else if (Protocol.DELETE_PATIENT.equals(command)) {
+                    handleDeletePatient(msg, out);
+                } else if (Protocol.UPDATE_PATIENT.equals(command)) {
+                    handleUpdatePatient(msg, out);
                 } else if (Protocol.PING.equals(command)) {
                     out.println(Messages.ok("PONG"));
                 } else {
@@ -70,28 +72,27 @@ public class ClientHandler implements Runnable {
         try {
             Map<String, String> data = Protocol.parseKeyValues(msg);
 
-            // Validar campos mínimos
             if (!data.containsKey("full_name") || !data.containsKey("document_id") ||
                 !data.containsKey("age") || !data.containsKey("sex") || !data.containsKey("email")) {
                 out.println(Messages.error(422, "Faltan campos obligatorios"));
                 return;
             }
 
-            // Generar ID único
             String patientId = "P-" + UUID.randomUUID().toString().substring(0, 8);
 
-            Patient patient = new Patient(
-                    patientId,
-                    data.get("full_name"),
-                    data.get("document_id"),
-                    Integer.parseInt(data.get("age")),
-                    data.get("sex"),
-                    data.get("email"),
-                    LocalDateTime.now(),
-                    data.getOrDefault("clinical_notes", ""),
-                    data.getOrDefault("checksum_fasta", ""),
-                    Long.parseLong(data.getOrDefault("file_size_bytes", "0"))
-            );
+            Patient patient = new Patient.Builder()
+                    .patientId(patientId)
+                    .fullName(data.get("full_name"))
+                    .documentId(data.get("document_id"))
+                    .age(Integer.parseInt(data.get("age")))
+                    .sex(data.get("sex"))
+                    .contactEmail(data.get("email"))
+                    .registrationDate(LocalDateTime.now())
+                    .clinicalNotes(data.getOrDefault("clinical_notes", ""))
+                    .checksumFasta(data.getOrDefault("checksum_fasta", ""))
+                    .fileSizeBytes(Long.parseLong(data.getOrDefault("file_size_bytes", "0")))
+                    .active(true)
+                    .build();
 
             repository.save(patient);
 
@@ -99,7 +100,7 @@ public class ClientHandler implements Runnable {
             System.out.println("✅ Paciente guardado en CSV con ID " + patientId);
 
         } catch (IllegalArgumentException e) {
-            out.println(Messages.error(409, e.getMessage())); // por ejemplo, doc_id duplicado
+            out.println(Messages.error(409, e.getMessage()));
         } catch (Exception e) {
             e.printStackTrace();
             out.println(Messages.error(500, "Error interno al crear paciente"));
@@ -138,12 +139,86 @@ public class ClientHandler implements Runnable {
             response.append("clinical_notes=").append(p.getClinicalNotes()).append("\n");
             response.append("checksum_fasta=").append(p.getChecksumFasta()).append("\n");
             response.append("file_size_bytes=").append(p.getFileSizeBytes()).append("\n");
+            response.append("active=").append(p.isActive()).append("\n");
             response.append("END\n");
 
             out.println(response.toString());
         } catch (Exception e) {
             e.printStackTrace();
             out.println(Messages.error(500, "Error interno al obtener paciente"));
+        }
+    }
+
+    private void handleDeletePatient(String msg, PrintWriter out) {
+        try {
+            Map<String, String> data = Protocol.parseKeyValues(msg);
+            if (!data.containsKey("patient_id")) {
+                out.println(Messages.error(422, "Falta el campo patient_id"));
+                return;
+            }
+
+            String patientId = data.get("patient_id");
+            boolean success = repository.deactivateById(patientId);
+
+            if (success) {
+                out.println(Messages.ok("Paciente " + patientId + " marcado como inactivo"));
+                System.out.println("🗑️ Paciente " + patientId + " desactivado.");
+            } else {
+                out.println(Messages.error(404, "Paciente no encontrado o ya estaba inactivo"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            out.println(Messages.error(500, "Error interno al eliminar paciente"));
+        }
+    }
+
+    private void handleUpdatePatient(String msg, PrintWriter out) {
+        try {
+            Map<String, String> data = Protocol.parseKeyValues(msg);
+            if (!data.containsKey("patient_id")) {
+                out.println(Messages.error(422, "Falta el campo patient_id"));
+                return;
+            }
+
+            String patientId = data.get("patient_id");
+            var patients = repository.findAll();
+            var patientOpt = patients.stream()
+                    .filter(p -> p.getPatientId().equals(patientId))
+                    .findFirst();
+
+            if (patientOpt.isEmpty()) {
+                out.println(Messages.error(404, "Paciente no encontrado"));
+                return;
+            }
+
+            Patient existing = patientOpt.get();
+
+            // Crear nuevo paciente con datos actualizados (los no enviados se mantienen)
+            Patient updated = new Patient.Builder()
+                    .patientId(existing.getPatientId())
+                    .fullName(data.getOrDefault("full_name", existing.getFullName()))
+                    .documentId(data.getOrDefault("document_id", existing.getDocumentId()))
+                    .age(Integer.parseInt(data.getOrDefault("age", String.valueOf(existing.getAge()))))
+                    .sex(data.getOrDefault("sex", existing.getSex()))
+                    .contactEmail(data.getOrDefault("email", existing.getContactEmail()))
+                    .registrationDate(existing.getRegistrationDate()) // no cambia
+                    .clinicalNotes(data.getOrDefault("clinical_notes", existing.getClinicalNotes()))
+                    .checksumFasta(data.getOrDefault("checksum_fasta", existing.getChecksumFasta()))
+                    .fileSizeBytes(Long.parseLong(data.getOrDefault("file_size_bytes", String.valueOf(existing.getFileSizeBytes()))))
+                    .active(existing.isActive())
+                    .build();
+
+            boolean success = repository.update(updated);
+
+            if (success) {
+                out.println(Messages.ok("Paciente " + patientId + " actualizado correctamente"));
+                System.out.println("✏️ Paciente " + patientId + " actualizado.");
+            } else {
+                out.println(Messages.error(500, "No se pudo actualizar el paciente"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            out.println(Messages.error(500, "Error interno al actualizar paciente"));
         }
     }
 }

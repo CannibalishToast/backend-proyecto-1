@@ -9,7 +9,6 @@ public class Client {
         String host = "127.0.0.1";
         int port = 4443;
 
-        // TrustManager permisivo (acepta cualquier certificado)
         SSLContext sc = SSLContext.getInstance("TLS");
         sc.init(null, new TrustManager[]{new X509TrustManager() {
             public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
@@ -27,6 +26,8 @@ public class Client {
             System.out.println("=== MENÚ CLIENTE ===");
             System.out.println("1. Crear paciente");
             System.out.println("2. Obtener paciente");
+            System.out.println("3. Eliminar paciente");
+            System.out.println("4. Actualizar paciente");
             System.out.print("Seleccione una opción: ");
             int option = Integer.parseInt(scanner.nextLine());
 
@@ -64,11 +65,49 @@ public class Client {
                 msg = "COMMAND: GET_PATIENT\n" +
                         "patient_id=" + patientId + "\n" +
                         "END\n";
+
+            } else if (option == 3) {
+                System.out.print("Ingrese patient_id a eliminar: ");
+                String patientId = scanner.nextLine();
+
+                msg = "COMMAND: DELETE_PATIENT\n" +
+                        "patient_id=" + patientId + "\n" +
+                        "END\n";
+
+            } else if (option == 4) {
+                System.out.print("Ingrese patient_id a actualizar: ");
+                String patientId = scanner.nextLine();
+
+                System.out.println("Ingrese nuevos datos (deje vacío para no cambiar):");
+
+                System.out.print("Nombre completo: ");
+                String fullName = scanner.nextLine();
+                System.out.print("Documento ID: ");
+                String documentId = scanner.nextLine();
+                System.out.print("Edad: ");
+                String age = scanner.nextLine();
+                System.out.print("Sexo (M/F): ");
+                String sex = scanner.nextLine();
+                System.out.print("Email: ");
+                String email = scanner.nextLine();
+                System.out.print("Notas clínicas: ");
+                String notes = scanner.nextLine();
+
+                msg = "COMMAND: UPDATE_PATIENT\n" +
+                        "patient_id=" + patientId + "\n";
+
+                if (!fullName.isBlank()) msg += "full_name=" + fullName + "\n";
+                if (!documentId.isBlank()) msg += "document_id=" + documentId + "\n";
+                if (!age.isBlank()) msg += "age=" + age + "\n";
+                if (!sex.isBlank()) msg += "sex=" + sex + "\n";
+                if (!email.isBlank()) msg += "email=" + email + "\n";
+                if (!notes.isBlank()) msg += "clinical_notes=" + notes + "\n";
+
+                msg += "END\n";
             }
 
             out.println(msg);
 
-            // Recibir respuesta
             String response;
             while ((response = in.readLine()) != null) {
                 System.out.println("📨 " + response);

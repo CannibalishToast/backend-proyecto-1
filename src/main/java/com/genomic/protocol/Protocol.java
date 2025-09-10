@@ -13,6 +13,8 @@ public class Protocol {
     public static final String GET_DISEASE = "GET_DISEASE";
     public static final String DELETE_PATIENT = "DELETE_PATIENT";
     public static final String PING = "PING";
+    public static final String UPDATE_PATIENT = "UPDATE_PATIENT";
+
 
     
 
