@@ -28,7 +28,6 @@ public class Client {
             System.out.println("2. Obtener paciente");
             System.out.println("3. Eliminar paciente");
             System.out.println("4. Actualizar paciente");
-            System.out.println("5. Subir archivo FASTA");
             System.out.print("Seleccione una opción: ");
             int option = Integer.parseInt(scanner.nextLine());
 
@@ -48,6 +47,17 @@ public class Client {
                 System.out.print("Notas clínicas: ");
                 String notes = scanner.nextLine();
 
+                System.out.print("Ruta del archivo FASTA: ");
+                String filePath = scanner.nextLine();
+
+                StringBuilder fastaContent = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+                    String l;
+                    while ((l = br.readLine()) != null) {
+                        fastaContent.append(l).append("\n");
+                    }
+                }
+
                 msg = "COMMAND: CREATE_PATIENT\n" +
                         "full_name=" + fullName + "\n" +
                         "document_id=" + documentId + "\n" +
@@ -55,8 +65,7 @@ public class Client {
                         "sex=" + sex + "\n" +
                         "email=" + email + "\n" +
                         "clinical_notes=" + notes + "\n" +
-                        "checksum_fasta=abc123def456\n" +
-                        "file_size_bytes=1024\n" +
+                        "fasta_content=" + fastaContent.toString().replace("\n", "\\n") + "\n" +
                         "END\n";
 
             } else if (option == 2) {
@@ -94,6 +103,22 @@ public class Client {
                 System.out.print("Notas clínicas: ");
                 String notes = scanner.nextLine();
 
+                System.out.print("¿Desea subir un nuevo archivo FASTA? (s/n): ");
+                String subirFasta = scanner.nextLine();
+
+                StringBuilder fastaContent = new StringBuilder();
+                if (subirFasta.equalsIgnoreCase("s")) {
+                    System.out.print("Ruta del archivo FASTA: ");
+                    String filePath = scanner.nextLine();
+
+                    try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+                        String l;
+                        while ((l = br.readLine()) != null) {
+                            fastaContent.append(l).append("\n");
+                        }
+                    }
+                }
+
                 msg = "COMMAND: UPDATE_PATIENT\n" +
                         "patient_id=" + patientId + "\n";
 
@@ -103,28 +128,9 @@ public class Client {
                 if (!sex.isBlank()) msg += "sex=" + sex + "\n";
                 if (!email.isBlank()) msg += "email=" + email + "\n";
                 if (!notes.isBlank()) msg += "clinical_notes=" + notes + "\n";
+                if (fastaContent.length() > 0) msg += "fasta_content=" + fastaContent.toString().replace("\n", "\\n") + "\n";
 
                 msg += "END\n";
-
-            } else if (option == 5) {
-                System.out.print("Ingrese patient_id: ");
-                String patientId = scanner.nextLine();
-
-                System.out.print("Ruta del archivo FASTA: ");
-                String filePath = scanner.nextLine();
-
-                StringBuilder fastaContent = new StringBuilder();
-                try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-                    String l;
-                    while ((l = br.readLine()) != null) {
-                        fastaContent.append(l).append("\n");
-                    }
-                }
-
-                msg = "COMMAND: UPLOAD_FASTA\n" +
-                        "patient_id=" + patientId + "\n" +
-                        "fasta_content=" + fastaContent.toString().replace("\n", "\\n") + "\n" +
-                        "END\n";
             }
 
             out.println(msg);
@@ -137,3 +143,4 @@ public class Client {
         }
     }
 }
+
