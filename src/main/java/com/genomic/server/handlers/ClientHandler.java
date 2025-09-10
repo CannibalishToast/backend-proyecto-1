@@ -4,17 +4,21 @@ import com.genomic.protocol.Protocol;
 import com.genomic.protocol.Messages;
 import com.genomic.model.Patient;
 import com.genomic.repository.PatientRepository;
+import com.genomic.repository.DiseaseRepository;
 
 import javax.net.ssl.SSLSocket;
 import java.io.*;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
 
 public class ClientHandler implements Runnable {
     private SSLSocket client;
     private PatientRepository repository = new PatientRepository();
+    private DiseaseRepository diseaseRepo = new DiseaseRepository();
+    private static final String DETECTIONS_FILE = "data/detections_report.csv";
 
     public ClientHandler(SSLSocket client) {
         this.client = client;
@@ -89,6 +93,9 @@ public class ClientHandler implements Runnable {
 
                 checksum = calculateChecksum(fastaContent);
                 fileSize = fastaContent.getBytes().length;
+
+                // 🔬 comparar contra enfermedades
+                checkDiseases(patientId, fastaContent, out);
             }
 
             Patient patient = new Patient.Builder()
@@ -214,6 +221,9 @@ public class ClientHandler implements Runnable {
 
                 checksum = calculateChecksum(fastaContent);
                 fileSize = fastaContent.getBytes().length;
+
+                // 🔬 comparar contra enfermedades
+                checkDiseases(patientId, fastaContent, out);
             }
 
             Patient updated = new Patient.Builder()
@@ -280,6 +290,46 @@ public class ClientHandler implements Runnable {
         StringBuilder sb = new StringBuilder();
         for (byte b : digest) sb.append(String.format("%02x", b));
         return sb.toString();
+    }
+
+    private void checkDiseases(String patientId, String fastaContent, PrintWriter out) {
+        try {
+            String patientSeq = fastaContent.replaceAll("\n", "").replaceAll(">", "");
+
+            var diseases = diseaseRepo.findAll();
+            boolean found = false;
+
+            for (DiseaseRepository.Disease d : diseases) {
+                String diseaseSeq = diseaseRepo.loadFasta(d.getDiseaseId());
+                if (diseaseSeq != null && patientSeq.contains(diseaseSeq)) {
+                    found = true;
+
+                    // registrar en detections_report.csv
+                    File file = new File(DETECTIONS_FILE);
+                    if (!file.exists()) {
+                        file.getParentFile().mkdirs();
+                        try (BufferedWriter w = new BufferedWriter(new FileWriter(file))) {
+                            w.write("patient_id,disease_id,disease_name,timestamp\n");
+                        }
+                    }
+                    try (BufferedWriter w = new BufferedWriter(new FileWriter(file, true))) {
+                        String ts = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                        w.write(patientId + "," + d.getDiseaseId() + "," + d.getName() + "," + ts + "\n");
+                    }
+
+                    out.println(Messages.ok("⚠️ Posible detección: " + d.getName() + " (" + d.getSeverity() + ")"));
+                    System.out.println("⚠️ Detección registrada: " + d.getName() + " en paciente " + patientId);
+                }
+            }
+
+            if (!found) {
+                out.println(Messages.ok("No se detectaron enfermedades conocidas."));
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            out.println(Messages.error(500, "Error en comparación de enfermedades"));
+        }
     }
 }
 
