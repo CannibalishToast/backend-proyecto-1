@@ -88,6 +88,17 @@ public class ClientHandler implements Runnable {
                 return;
             }
 
+            // 🚨 Validar duplicados por document_id
+            String documentId = data.get("document_id");
+            boolean exists = repository.findAll().stream()
+                    .anyMatch(p -> p.getDocumentId().equals(documentId) && p.isActive());
+
+            if (exists) {
+                out.println(Messages.error(409, "Ya existe un paciente con este documento"));
+                logger.warning("Intento de duplicar paciente con document_id=" + documentId);
+                return;
+            }
+
             String patientId = "P-" + UUID.randomUUID().toString().substring(0, 8);
 
             String fastaContent = data.get("fasta_content");
@@ -107,7 +118,7 @@ public class ClientHandler implements Runnable {
             Patient patient = new Patient.Builder()
                     .patientId(patientId)
                     .fullName(data.get("full_name"))
-                    .documentId(data.get("document_id"))
+                    .documentId(documentId)
                     .age(Integer.parseInt(data.get("age")))
                     .sex(data.get("sex"))
                     .contactEmail(data.get("email"))
