@@ -1,0 +1,21 @@
+sept 10, 2025 12:45:45 A. M. com.genomic.server.Server main
+INFORMACIÓN: Servidor SSL escuchando en puerto 4443
+sept 10, 2025 12:46:07 A. M. com.genomic.server.Server main
+INFORMACIÓN: Cliente conectado desde /127.0.0.1
+sept 10, 2025 12:47:28 A. M. com.genomic.server.handlers.ClientHandler run
+INFORMACIÓN: Mensaje recibido:
+COMMAND: CREATE_PATIENT
+full_name=Juanito Alcachofa
+document_id=102931293
+age=22
+sex=M
+email=ja@gmail.com
+clinical_notes=
+fasta_content=>sequence1\nACGTACGTACGTACGT\n
+
+sept 10, 2025 12:47:28 A. M. com.genomic.server.handlers.ClientHandler checkDiseases
+ADVERTENCIA: Detección registrada: Covid en paciente P-b7dc77a1
+sept 10, 2025 12:47:28 A. M. com.genomic.server.handlers.ClientHandler handleCreatePatient
+INFORMACIÓN: Paciente creado: P-b7dc77a1
+sept 10, 2025 12:47:28 A. M. com.genomic.server.handlers.ClientHandler run
+GRAVE: Error en handler: Se ha anulado una conexión establecida por el software en su equipo host.

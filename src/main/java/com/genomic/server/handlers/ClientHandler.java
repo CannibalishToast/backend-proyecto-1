@@ -13,15 +13,18 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Logger;
 
 public class ClientHandler implements Runnable {
     private SSLSocket client;
     private PatientRepository repository = new PatientRepository();
     private DiseaseRepository diseaseRepo = new DiseaseRepository();
     private static final String DETECTIONS_FILE = "data/detections_report.csv";
+    private Logger logger;
 
-    public ClientHandler(SSLSocket client) {
+    public ClientHandler(SSLSocket client, Logger logger) {
         this.client = client;
+        this.logger = logger;
     }
 
     @Override
@@ -42,12 +45,12 @@ public class ClientHandler implements Runnable {
                 }
 
                 if (sb.length() == 0) {
-                    System.out.println("❌ Cliente desconectado.");
+                    logger.info("Cliente desconectado.");
                     break;
                 }
 
                 String msg = sb.toString();
-                System.out.println("📩 Mensaje recibido:\n" + msg);
+                logger.info("Mensaje recibido:\n" + msg);
 
                 String command = Protocol.extractCommand(msg);
                 if (Protocol.CREATE_PATIENT.equals(command)) {
@@ -60,13 +63,16 @@ public class ClientHandler implements Runnable {
                     handleUpdatePatient(msg, out);
                 } else if (Protocol.PING.equals(command)) {
                     out.println(Messages.ok("PONG"));
+                    logger.info("PING recibido -> PONG enviado");
                 } else {
                     out.println(Messages.error(400, "Comando no reconocido"));
+                    logger.warning("Comando no reconocido");
                 }
             }
 
             client.close();
         } catch (Exception e) {
+            logger.severe("Error en handler: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -78,6 +84,7 @@ public class ClientHandler implements Runnable {
             if (!data.containsKey("full_name") || !data.containsKey("document_id") ||
                 !data.containsKey("age") || !data.containsKey("sex") || !data.containsKey("email")) {
                 out.println(Messages.error(422, "Faltan campos obligatorios"));
+                logger.warning("Intento de creación de paciente con datos incompletos");
                 return;
             }
 
@@ -94,7 +101,6 @@ public class ClientHandler implements Runnable {
                 checksum = calculateChecksum(fastaContent);
                 fileSize = fastaContent.getBytes().length;
 
-                // 🔬 comparar contra enfermedades
                 checkDiseases(patientId, fastaContent, out);
             }
 
@@ -115,13 +121,12 @@ public class ClientHandler implements Runnable {
             repository.save(patient);
 
             out.println(Messages.ok("Paciente creado con ID " + patientId));
-            System.out.println("✅ Paciente guardado en CSV con ID " + patientId);
+            logger.info("Paciente creado: " + patientId);
 
-        } catch (IllegalArgumentException e) {
-            out.println(Messages.error(409, e.getMessage()));
         } catch (Exception e) {
-            e.printStackTrace();
             out.println(Messages.error(500, "Error interno al crear paciente"));
+            logger.severe("Error al crear paciente: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -141,6 +146,7 @@ public class ClientHandler implements Runnable {
 
             if (patientOpt.isEmpty()) {
                 out.println(Messages.error(404, "Paciente no encontrado"));
+                logger.warning("Paciente no encontrado: " + patientId);
                 return;
             }
 
@@ -161,9 +167,11 @@ public class ClientHandler implements Runnable {
             response.append("END\n");
 
             out.println(response.toString());
+            logger.info("Consulta paciente OK: " + patientId);
         } catch (Exception e) {
-            e.printStackTrace();
             out.println(Messages.error(500, "Error interno al obtener paciente"));
+            logger.severe("Error en GET_PATIENT: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -180,13 +188,15 @@ public class ClientHandler implements Runnable {
 
             if (success) {
                 out.println(Messages.ok("Paciente " + patientId + " marcado como inactivo"));
-                System.out.println("🗑️ Paciente " + patientId + " desactivado.");
+                logger.info("Paciente desactivado: " + patientId);
             } else {
                 out.println(Messages.error(404, "Paciente no encontrado o ya estaba inactivo"));
+                logger.warning("Intento de eliminar paciente inexistente: " + patientId);
             }
         } catch (Exception e) {
-            e.printStackTrace();
             out.println(Messages.error(500, "Error interno al eliminar paciente"));
+            logger.severe("Error en DELETE_PATIENT: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -206,6 +216,7 @@ public class ClientHandler implements Runnable {
 
             if (patientOpt.isEmpty()) {
                 out.println(Messages.error(404, "Paciente no encontrado"));
+                logger.warning("Intento de actualizar paciente inexistente: " + patientId);
                 return;
             }
 
@@ -222,7 +233,6 @@ public class ClientHandler implements Runnable {
                 checksum = calculateChecksum(fastaContent);
                 fileSize = fastaContent.getBytes().length;
 
-                // 🔬 comparar contra enfermedades
                 checkDiseases(patientId, fastaContent, out);
             }
 
@@ -244,13 +254,15 @@ public class ClientHandler implements Runnable {
 
             if (success) {
                 out.println(Messages.ok("Paciente " + patientId + " actualizado correctamente"));
-                System.out.println("✏️ Paciente " + patientId + " actualizado.");
+                logger.info("Paciente actualizado: " + patientId);
             } else {
                 out.println(Messages.error(500, "No se pudo actualizar el paciente"));
+                logger.warning("Fallo al actualizar paciente: " + patientId);
             }
         } catch (Exception e) {
-            e.printStackTrace();
             out.println(Messages.error(500, "Error interno al actualizar paciente"));
+            logger.severe("Error en UPDATE_PATIENT: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -259,11 +271,13 @@ public class ClientHandler implements Runnable {
             String[] lines = fastaContent.split("\n");
             if (lines.length < 2 || !lines[0].startsWith(">")) {
                 out.println(Messages.error(422, "Formato FASTA inválido"));
+                logger.warning("FASTA inválido recibido para paciente " + patientId);
                 return false;
             }
             for (int i = 1; i < lines.length; i++) {
                 if (!lines[i].matches("[ACGTN]+")) {
                     out.println(Messages.error(422, "Secuencia contiene caracteres inválidos"));
+                    logger.warning("FASTA con caracteres inválidos para paciente " + patientId);
                     return false;
                 }
             }
@@ -278,8 +292,9 @@ public class ClientHandler implements Runnable {
 
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
             out.println(Messages.error(500, "Error al procesar archivo FASTA"));
+            logger.severe("Error procesando FASTA: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
@@ -301,10 +316,9 @@ public class ClientHandler implements Runnable {
 
             for (DiseaseRepository.Disease d : diseases) {
                 String diseaseSeq = diseaseRepo.loadFasta(d.getDiseaseId());
-                if (diseaseSeq != null && patientSeq.contains(diseaseSeq)) {
+                if (diseaseSeq != null && patientSeq.contains(diseaseSeq.replaceAll("\n", "").replaceAll(">", ""))) {
                     found = true;
 
-                    // registrar en detections_report.csv
                     File file = new File(DETECTIONS_FILE);
                     if (!file.exists()) {
                         file.getParentFile().mkdirs();
@@ -317,19 +331,20 @@ public class ClientHandler implements Runnable {
                         w.write(patientId + "," + d.getDiseaseId() + "," + d.getName() + "," + ts + "\n");
                     }
 
-                    out.println(Messages.ok("⚠️ Posible detección: " + d.getName() + " (" + d.getSeverity() + ")"));
-                    System.out.println("⚠️ Detección registrada: " + d.getName() + " en paciente " + patientId);
+                    out.println(Messages.ok("Posible detección: " + d.getName() + " (" + d.getSeverity() + ")"));
+                    logger.warning("Detección registrada: " + d.getName() + " en paciente " + patientId);
                 }
             }
 
             if (!found) {
                 out.println(Messages.ok("No se detectaron enfermedades conocidas."));
+                logger.info("Sin detecciones para paciente " + patientId);
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
             out.println(Messages.error(500, "Error en comparación de enfermedades"));
+            logger.severe("Error en checkDiseases: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }
-
