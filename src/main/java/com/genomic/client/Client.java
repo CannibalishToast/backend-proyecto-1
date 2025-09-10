@@ -9,6 +9,7 @@ public class Client {
         String host = "127.0.0.1";
         int port = 4443;
 
+        // TrustManager permisivo (acepta cualquier certificado)
         SSLContext sc = SSLContext.getInstance("TLS");
         sc.init(null, new TrustManager[]{new X509TrustManager() {
             public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
@@ -23,124 +24,106 @@ public class Client {
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
              Scanner scanner = new Scanner(System.in)) {
 
-            System.out.println("=== MENÚ CLIENTE ===");
-            System.out.println("1. Crear paciente");
-            System.out.println("2. Obtener paciente");
-            System.out.println("3. Eliminar paciente");
-            System.out.println("4. Actualizar paciente");
-            System.out.print("Seleccione una opción: ");
-            int option = Integer.parseInt(scanner.nextLine());
+            boolean running = true;
 
-            String msg = "";
+            while (running) {
+                System.out.println("\n=== MENÚ CLIENTE ===");
+                System.out.println("1. Crear paciente");
+                System.out.println("2. Obtener paciente");
+                System.out.println("3. Eliminar paciente");
+                System.out.println("4. Actualizar paciente");
+                System.out.println("0. Salir");
+                System.out.print("Seleccione una opción: ");
+                String option = scanner.nextLine();
 
-            if (option == 1) {
-                System.out.print("Nombre completo: ");
-                String fullName = scanner.nextLine();
-                System.out.print("Documento ID: ");
-                String documentId = scanner.nextLine();
-                System.out.print("Edad: ");
-                String age = scanner.nextLine();
-                System.out.print("Sexo (M/F): ");
-                String sex = scanner.nextLine();
-                System.out.print("Email: ");
-                String email = scanner.nextLine();
-                System.out.print("Notas clínicas: ");
-                String notes = scanner.nextLine();
+                String msg = null;
 
-                System.out.print("Ruta del archivo FASTA: ");
-                String filePath = scanner.nextLine();
+                switch (option) {
+                    case "1":
+                        System.out.print("Nombre completo: ");
+                        String name = scanner.nextLine();
+                        System.out.print("Documento: ");
+                        String doc = scanner.nextLine();
+                        System.out.print("Edad: ");
+                        String age = scanner.nextLine();
+                        System.out.print("Sexo (M/F): ");
+                        String sex = scanner.nextLine();
+                        System.out.print("Email: ");
+                        String email = scanner.nextLine();
 
-                StringBuilder fastaContent = new StringBuilder();
-                try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-                    String l;
-                    while ((l = br.readLine()) != null) {
-                        fastaContent.append(l).append("\n");
-                    }
-                }
-
-                msg = "COMMAND: CREATE_PATIENT\n" +
-                        "full_name=" + fullName + "\n" +
-                        "document_id=" + documentId + "\n" +
-                        "age=" + age + "\n" +
-                        "sex=" + sex + "\n" +
-                        "email=" + email + "\n" +
-                        "clinical_notes=" + notes + "\n" +
-                        "fasta_content=" + fastaContent.toString().replace("\n", "\\n") + "\n" +
-                        "END\n";
-
-            } else if (option == 2) {
-                System.out.print("Ingrese patient_id: ");
-                String patientId = scanner.nextLine();
-
-                msg = "COMMAND: GET_PATIENT\n" +
-                        "patient_id=" + patientId + "\n" +
-                        "END\n";
-
-            } else if (option == 3) {
-                System.out.print("Ingrese patient_id a eliminar: ");
-                String patientId = scanner.nextLine();
-
-                msg = "COMMAND: DELETE_PATIENT\n" +
-                        "patient_id=" + patientId + "\n" +
-                        "END\n";
-
-            } else if (option == 4) {
-                System.out.print("Ingrese patient_id a actualizar: ");
-                String patientId = scanner.nextLine();
-
-                System.out.println("Ingrese nuevos datos (deje vacío para no cambiar):");
-
-                System.out.print("Nombre completo: ");
-                String fullName = scanner.nextLine();
-                System.out.print("Documento ID: ");
-                String documentId = scanner.nextLine();
-                System.out.print("Edad: ");
-                String age = scanner.nextLine();
-                System.out.print("Sexo (M/F): ");
-                String sex = scanner.nextLine();
-                System.out.print("Email: ");
-                String email = scanner.nextLine();
-                System.out.print("Notas clínicas: ");
-                String notes = scanner.nextLine();
-
-                System.out.print("¿Desea subir un nuevo archivo FASTA? (s/n): ");
-                String subirFasta = scanner.nextLine();
-
-                StringBuilder fastaContent = new StringBuilder();
-                if (subirFasta.equalsIgnoreCase("s")) {
-                    System.out.print("Ruta del archivo FASTA: ");
-                    String filePath = scanner.nextLine();
-
-                    try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-                        String l;
-                        while ((l = br.readLine()) != null) {
-                            fastaContent.append(l).append("\n");
+                        System.out.println("Ingrese contenido FASTA (termine con una línea vacía):");
+                        StringBuilder fasta = new StringBuilder();
+                        while (true) {
+                            String line = scanner.nextLine();
+                            if (line.isBlank()) break;
+                            fasta.append(line).append("\\n"); // escapar \n
                         }
-                    }
+
+                        msg = "COMMAND: CREATE_PATIENT\n" +
+                              "full_name=" + name + "\n" +
+                              "document_id=" + doc + "\n" +
+                              "age=" + age + "\n" +
+                              "sex=" + sex + "\n" +
+                              "email=" + email + "\n" +
+                              "fasta_content=" + fasta.toString() + "\nEND\n";
+                        break;
+
+                    case "2":
+                        System.out.print("ID del paciente: ");
+                        String idGet = scanner.nextLine();
+                        msg = "COMMAND: GET_PATIENT\npatient_id=" + idGet + "\nEND\n";
+                        break;
+
+                    case "3":
+                        System.out.print("ID del paciente a eliminar: ");
+                        String idDel = scanner.nextLine();
+                        msg = "COMMAND: DELETE_PATIENT\npatient_id=" + idDel + "\nEND\n";
+                        break;
+
+                    case "4":
+                        System.out.print("ID del paciente a actualizar: ");
+                        String idUpd = scanner.nextLine();
+                        System.out.print("Nuevo nombre (enter para dejar igual): ");
+                        String newName = scanner.nextLine();
+                        System.out.print("Nueva edad (enter para dejar igual): ");
+                        String newAge = scanner.nextLine();
+                        System.out.println("Nuevo FASTA (enter para omitir, terminar con línea vacía):");
+                        StringBuilder newFasta = new StringBuilder();
+                        while (true) {
+                            String line = scanner.nextLine();
+                            if (line.isBlank()) break;
+                            newFasta.append(line).append("\\n");
+                        }
+
+                        msg = "COMMAND: UPDATE_PATIENT\n" +
+                              "patient_id=" + idUpd + "\n";
+                        if (!newName.isBlank()) msg += "full_name=" + newName + "\n";
+                        if (!newAge.isBlank()) msg += "age=" + newAge + "\n";
+                        if (newFasta.length() > 0) msg += "fasta_content=" + newFasta.toString() + "\n";
+                        msg += "END\n";
+                        break;
+
+                    case "0":
+                        running = false;
+                        continue;
+
+                    default:
+                        System.out.println("Opción inválida.");
+                        continue;
                 }
 
-                msg = "COMMAND: UPDATE_PATIENT\n" +
-                        "patient_id=" + patientId + "\n";
+                if (msg != null) {
+                    out.println(msg);
 
-                if (!fullName.isBlank()) msg += "full_name=" + fullName + "\n";
-                if (!documentId.isBlank()) msg += "document_id=" + documentId + "\n";
-                if (!age.isBlank()) msg += "age=" + age + "\n";
-                if (!sex.isBlank()) msg += "sex=" + sex + "\n";
-                if (!email.isBlank()) msg += "email=" + email + "\n";
-                if (!notes.isBlank()) msg += "clinical_notes=" + notes + "\n";
-                if (fastaContent.length() > 0) msg += "fasta_content=" + fastaContent.toString().replace("\n", "\\n") + "\n";
-
-                msg += "END\n";
-            }
-
-            out.println(msg);
-
-            String response;
-            while ((response = in.readLine()) != null) {
-                System.out.println("📨 " + response);
-                if (response.equals("END")) break;
+                    String response;
+                    System.out.println("--- Respuesta del servidor ---");
+                    while ((response = in.readLine()) != null) {
+                        if (response.equals("END")) break;
+                        System.out.println(response);
+                    }
+                    System.out.println("-------------------------------");
+                }
             }
         }
     }
 }
-
